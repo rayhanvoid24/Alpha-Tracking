@@ -1,0 +1,14 @@
+# Environment variables - never push these to GitHub
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Django
+*.sqlite3
+
+# React
+node_modules/
+build/
