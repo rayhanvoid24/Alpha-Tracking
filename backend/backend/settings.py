@@ -36,7 +36,7 @@ ZOHO_ORGANIZATION_ID = os.getenv('ZOHO_ORGANIZATION_ID')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['alpha-tracking.onrender.com', '127.0.0.1', 'localhost']
 
 
 # Application definition
