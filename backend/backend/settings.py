@@ -132,7 +132,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'https://alpha-tracking.netlify.app',
+]
 
 AUTH_USER_MODEL = 'invoices.User'
 
