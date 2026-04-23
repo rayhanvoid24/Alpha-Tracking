@@ -125,7 +125,11 @@ class ZohoInvoicesView(APIView):
             return Response({'error': 'Zoho not connected. Visit /api/zoho/connect/ first'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Fetch invoices from Zoho
-        invoices = fetch_zoho_invoices(token.access_token, settings.ZOHO_ORGANIZATION_ID)
+        invoices = fetch_zoho_invoices(
+            token.access_token,
+            settings.ZOHO_ORGANIZARION_ID,
+            refresh_token = token.refresh_token
+        )
 
         for invoice in invoices['invoices']:
             customer,created = Customer.objects.get_or_create(

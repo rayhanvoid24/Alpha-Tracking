@@ -12,7 +12,7 @@ def get_zoho_auth_url():
         'scope': 'ZohoBooks.invoices.READ',
         'client_id': settings.ZOHO_CLIENT_ID,
         'response_type': 'code',
-        'redirect_uri': 'http://localhost:8000/api/zoho/callback/',
+        'redirect_uri': 'https://alpha-tracking.onrender.com/api/zoho/callback/',
         'access_type': 'offline',
     }
      # Build the URL with parameters
@@ -29,21 +29,32 @@ def exchange_code_for_tokens(code):
     })
     return response.json()
 # Step 3 — Use the access token to fetch invoices from Zoho Books
-def fetch_zoho_invoices(access_token, organization_id):
-    
+def fetch_zoho_invoices(access_token, organization_id, refresh_token=None):
     headers = {
         'Authorization': f'Zoho-oauthtoken {access_token}',
     }
     params = {
         'organization_id': organization_id,
-        #fectch all the invoices from when zoho was first utilised
         'date_start': '2026-03-15',
         'sort_column': 'date',
-        'sort_order': 'D' ## sorting order is set to decending
+        'sort_order': 'D',
     }
     response = requests.get(ZOHO_INVOICES_URL, headers=headers, params=params)
+    data = response.json()
+
+    # If token expired and we have a refresh token, get a new one
+    if data.get('code') == 57 and refresh_token:
+        new_tokens = refresh_zoho_token(refresh_token)
+        if 'access_token' in new_tokens:
+            # Update with new access token and retry
+            headers['Authorization'] = f'Zoho-oauthtoken {new_tokens["access_token"]}'
+            response = requests.get(ZOHO_INVOICES_URL, headers=headers, params=params)
+            data = response.json()
+            # Return new access token so we can save it
+            data['new_access_token'] = new_tokens['access_token']
     
-    return response.json()
+    return data
+
 # Step 4 — Use the refresh token to get a new access token when the old one expires
 def refresh_zoho_token(refresh_token):
     response = requests.post(ZOHO_TOKEN_URL, data={
