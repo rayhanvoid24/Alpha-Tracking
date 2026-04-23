@@ -127,7 +127,7 @@ class ZohoInvoicesView(APIView):
         # Fetch invoices from Zoho
         invoices = fetch_zoho_invoices(
             token.access_token,
-            settings.ZOHO_ORGANIZARION_ID,
+            settings.ZOHO_ORGANIZATION_ID,
             refresh_token = token.refresh_token
         )
 
