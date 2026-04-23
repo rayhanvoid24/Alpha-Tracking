@@ -45,6 +45,7 @@ class LoginView(APIView):
     ## allows user to log in
 
     def post(self,request):
+        print('Login attempt data:', request.data)
         login = LoginSerializer(data = request.data)
         if login.is_valid():
             email = login.validated_data["email"]
