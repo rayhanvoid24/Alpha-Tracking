@@ -24,7 +24,7 @@ def exchange_code_for_tokens(code):
         'code': code,
         'client_id': settings.ZOHO_CLIENT_ID,
         'client_secret': settings.ZOHO_CLIENT_SECRET,
-        'redirect_uri': 'http://localhost:8000/api/zoho/callback/',
+        'redirect_uri': 'https://alpha-tracking.onrender.com/api/zoho/callback/',
         'grant_type': 'authorization_code',
     })
     return response.json()
