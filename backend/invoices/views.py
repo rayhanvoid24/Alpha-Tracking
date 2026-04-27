@@ -131,6 +131,10 @@ class ZohoInvoicesView(APIView):
             settings.ZOHO_ORGANIZATION_ID,
             refresh_token = token.refresh_token
         )
+        if 'invoices' not in invoices:
+            return Response({'error': 'Failed to fetch from Zoho. Please reconnect at /api/zoho/connect/'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                            )
 
         for invoice in invoices['invoices']:
             customer,created = Customer.objects.get_or_create(
