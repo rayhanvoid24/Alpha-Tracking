@@ -93,32 +93,31 @@ class ZohoConnectView(APIView):
 class ZohoCallbackView(APIView):
     permission_classes = []
 
-def get(self, request):
-    code = request.GET.get('code')
-    if not code:
-        return Response({'error': 'code not provided'}, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        code = request.GET.get('code')
+        if not code:
+            return Response({'error': 'code not provided'}, status=status.HTTP_400_BAD_REQUEST)
 
-    token_data = exchange_code_for_tokens(code)
-    print('TOKEN DATA:', token_data)
+        token_data = exchange_code_for_tokens(code)
+        print('TOKEN DATA:', token_data)
 
-    if 'access_token' not in token_data:
-        return Response({'error': 'failed to get tokens from Zoho'}, status=status.HTTP_400_BAD_REQUEST)
+        if 'access_token' not in token_data:
+            return Response({'error': 'failed to get tokens from Zoho'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Preserve existing refresh token if Zoho doesn't send a new one
-    refresh_token = token_data.get('refresh_token', '')
-    existing = ZohoToken.objects.first()
-    if not refresh_token and existing:
-        refresh_token = existing.refresh_token
+        # Preserve existing refresh token if Zoho doesn't send a new one
+        refresh_token = token_data.get('refresh_token', '')
+        existing = ZohoToken.objects.first()
+        if not refresh_token and existing:
+            refresh_token = existing.refresh_token
 
-    ZohoToken.objects.all().delete()
-    ZohoToken.objects.create(
-        access_token=token_data['access_token'],
-        refresh_token=refresh_token,
-        organization_id=request.GET.get('location', '')
-    )
+        ZohoToken.objects.all().delete()
+        ZohoToken.objects.create(
+            access_token=token_data['access_token'],
+            refresh_token=refresh_token,
+            organization_id=request.GET.get('location', '')
+        )
 
-    return Response({'message': 'Zoho connected successfully!'}, status=status.HTTP_200_OK)
-    
+        return Response({'message': 'Zoho connected successfully!'}, status=status.HTTP_200_OK)
        
 class ZohoInvoicesView(APIView):
     def get(self, request):
