@@ -76,6 +76,7 @@ def fetch_zoho_items(access_token, organization_id, refresh_token=None):
     params = {
         'organization_id': organization_id,
     }
+    print('ORG ID BEING SENT:', repr(organization_id))
     response = requests.get(ZOHO_ITEMS_URL, headers=headers, params=params)
     data = response.json()
 
