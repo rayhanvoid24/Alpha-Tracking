@@ -64,7 +64,9 @@ def refresh_zoho_token(refresh_token):
         'client_id': settings.ZOHO_CLIENT_ID,
         'client_secret': settings.ZOHO_CLIENT_SECRET,
         'grant_type': 'refresh_token',
+        'scope': 'ZohoBooks.invoices.READ,ZohoBooks.invoices.CREATE,ZohoBooks.items.READ',
     })
+    print('REFRESH TOKEN RESPONSE:', response.json())
     return response.json()
 
 def fetch_zoho_items(access_token, organization_id, refresh_token=None):
