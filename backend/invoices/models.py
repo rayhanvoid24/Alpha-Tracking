@@ -48,6 +48,8 @@ class Customer(models.Model):
     account = models.CharField(max_length= 10, blank= False, null= False)
     BSB = models.CharField(max_length= 6, blank= False, null= False )
     created_at = models.DateTimeField(auto_now_add= True)
+    zoho_pricebook_id = models.CharField(max_length=50, blank=True, null=True)
+    zoho_contact_id = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self):
         return self.name

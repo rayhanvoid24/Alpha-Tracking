@@ -5,6 +5,7 @@ from django.conf import settings
 ZOHO_AUTH_URL = 'https://accounts.zoho.com.au/oauth/v2/auth'
 ZOHO_TOKEN_URL = 'https://accounts.zoho.com.au/oauth/v2/token'
 ZOHO_INVOICES_URL = 'https://www.zohoapis.com.au/books/v3/invoices'
+ZOHO_ITEMS_URL = 'https://www.zohoapis.com.au/books/v3/items'
 
 # Step 1 — Generate the URL that redirects the user/to Zoho's login page to grant access
 def get_zoho_auth_url():
@@ -63,4 +64,14 @@ def refresh_zoho_token(refresh_token):
         'client_secret': settings.ZOHO_CLIENT_SECRET,
         'grant_type': 'refresh_token',
     })
+    return response.json()
+
+def fetch_zoho_items(access_token, organization_id):
+    headers = {
+        'Authorization': f'Zoho-oauthtoken {access_token}',
+    }
+    params = {
+        'organization_id': organization_id,
+    }
+    response = requests.get(ZOHO_ITEMS_URL, headers=headers, params=params)
     return response.json()
