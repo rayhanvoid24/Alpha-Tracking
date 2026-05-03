@@ -10,7 +10,7 @@ ZOHO_ITEMS_URL = 'https://www.zohoapis.com.au/books/v3/items'
 # Step 1 — Generate the URL that redirects the user/to Zoho's login page to grant access
 def get_zoho_auth_url():
     params = {
-        'scope': 'ZohoBooks.invoices.READ',
+        'scope':'ZohoBooks.invoices.READ,ZohoBooks.invoices.CREATE,ZohoBooks.items.READ',
         'client_id': settings.ZOHO_CLIENT_ID,
         'response_type': 'code',
         'redirect_uri': 'https://alpha-tracking.onrender.com/api/zoho/callback/',
