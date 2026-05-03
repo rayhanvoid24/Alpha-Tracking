@@ -15,8 +15,8 @@ urlpatterns = [
     path('zoho/connect/',ZohoConnectView.as_view()),
     path('zoho/invoices/',ZohoInvoicesView.as_view()),
     path('invoices/', InvoiceListView.as_view()),
-    path('invoices/<int:id>/', InvoiceUpdateView.as_view()),
     path('invoices/create/', CreateInvoiceView.as_view()),
+    path('invoices/<int:id>/', InvoiceUpdateView.as_view()),
     path('invoices/<int:id>/delete/', InvoiceDeleteView.as_view()),
     path('zoho/items/', ZohoSyncItemsView.as_view()),
 
