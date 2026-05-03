@@ -6,11 +6,12 @@ ZOHO_AUTH_URL = 'https://accounts.zoho.com.au/oauth/v2/auth'
 ZOHO_TOKEN_URL = 'https://accounts.zoho.com.au/oauth/v2/token'
 ZOHO_INVOICES_URL = 'https://www.zohoapis.com.au/books/v3/invoices'
 ZOHO_ITEMS_URL = 'https://www.zohoapis.com.au/books/v3/items'
+ZOHO_CONTACTS_URL = 'https://www.zohoapis.com.au/books/v3/contacts'
 
 # Step 1 — Generate the URL that redirects the user/to Zoho's login page to grant access
 def get_zoho_auth_url():
     params = {
-        'scope': 'ZohoBooks.invoices.READ,ZohoBooks.invoices.CREATE,ZohoBooks.settings.READ',
+        'scope': 'ZohoBooks.invoices.READ,ZohoBooks.invoices.CREATE,ZohoBooks.settings.READ,ZohoBooks.contacts.READ',
         'client_id': settings.ZOHO_CLIENT_ID,
         'response_type': 'code',
         'redirect_uri': 'https://alpha-tracking.onrender.com/api/zoho/callback/',
@@ -91,4 +92,24 @@ def fetch_zoho_items(access_token, organization_id, refresh_token=None):
          data = response.json()
          print('RETRY RESPONSE:', data)
          data['new_access_token'] = new_tokens['access_token']
+    return data
+
+def fetch_zoho_contacts(access_token, organization_id, refresh_token=None):
+    headers = {
+        'Authorization': f'Zoho-oauthtoken {access_token}',
+    }
+    params = {
+        'organization_id': organization_id,
+    }
+    response = requests.get(ZOHO_CONTACTS_URL, headers=headers, params=params)
+    data = response.json()
+
+    if data.get('code') == 57 and refresh_token:
+        new_tokens = refresh_zoho_token(refresh_token)
+        if 'access_token' in new_tokens:
+            headers['Authorization'] = f'Zoho-oauthtoken {new_tokens["access_token"]}'
+            response = requests.get(ZOHO_CONTACTS_URL, headers=headers, params=params)
+            data = response.json()
+            data['new_access_token'] = new_tokens['access_token']
+
     return data

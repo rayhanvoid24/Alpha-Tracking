@@ -304,3 +304,40 @@ class ZohoSyncItemsView(APIView):
                         'not_found': not_found}, status= status.HTTP_200_OK
                 
                 )
+
+class ZohoSyncContactsView(APIView):
+    def get(self, request):
+        try:
+            token = ZohoToken.objects.latest('created_at')
+        except ZohoToken.DoesNotExist:
+            return Response({'error': 'Zoho not connected'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .zoho import fetch_zoho_contacts
+        contacts = fetch_zoho_contacts(token.access_token, settings.ZOHO_ORGANIZATION_ID, refresh_token=token.refresh_token)
+
+        if 'new_access_token' in contacts:
+            token.access_token = contacts.pop('new_access_token')
+            token.save()
+
+        if 'contacts' not in contacts:
+            return Response({'error': 'Failed to fetch contacts'}, status=status.HTTP_400_BAD_REQUEST)
+
+        synced = 0
+        not_found = []
+
+        for contact in contacts['contacts']:
+            contact_name = contact.get('contact_name', '').strip()
+            zoho_contact_id = contact.get('contact_id', '')
+
+            try:
+                customer = Customer.objects.get(name=contact_name)
+                customer.zoho_contact_id = zoho_contact_id
+                customer.save()
+                synced += 1
+            except Customer.DoesNotExist:
+                not_found.append(contact_name)
+
+        return Response({
+            'message': f'Synced {synced} contacts',
+            'not_found': not_found,
+        }, status=status.HTTP_200_OK)

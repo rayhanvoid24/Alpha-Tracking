@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import RegisterView, LoginView,ZohoConnectView,ZohoCallbackView,ZohoInvoicesView,InvoiceListView,InvoiceUpdateView,CreateInvoiceView,InvoiceDeleteView,ZohoSyncItemsView
+from .views import RegisterView, LoginView,ZohoConnectView,ZohoCallbackView,ZohoInvoicesView,InvoiceListView,InvoiceUpdateView,CreateInvoiceView,InvoiceDeleteView,ZohoSyncItemsView,ZohoSyncContactsView
 
 # All auth related URLs
 # Each path connects a URL to a view
@@ -19,6 +19,7 @@ urlpatterns = [
     path('invoices/<int:id>/', InvoiceUpdateView.as_view()),
     path('invoices/<int:id>/delete/', InvoiceDeleteView.as_view()),
     path('zoho/items/', ZohoSyncItemsView.as_view()),
+    path('zoho/contacts/', ZohoSyncContactsView.as_view()),
 
 
 
