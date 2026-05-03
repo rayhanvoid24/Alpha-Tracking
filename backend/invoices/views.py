@@ -279,7 +279,7 @@ class ZohoSyncItemsView(APIView):
         print('ZOHO ITEMS RESPONSE:', items)
 
         if 'items' not in items:
-            return Response({'error': 'Failed to fetch items'},status= status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Failed to fetch items'},status= status.HTTP_400_BAD_REQUEST)
         
         synced = 0
         not_found = []
