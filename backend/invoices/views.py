@@ -109,7 +109,8 @@ class ZohoCallbackView(APIView):
         existing = ZohoToken.objects.first()
         if not refresh_token and existing:
             refresh_token = existing.refresh_token
-
+        print('EXISTING REFRESH TOKEN:', existing.refresh_token if existing else 'NO EXISTING TOKEN')
+        print('NEW REFRESH TOKEN FROM ZOHO:', token_data.get('refresh_token', 'NOT PROVIDED'))
         ZohoToken.objects.all().delete()
         ZohoToken.objects.create(
             access_token=token_data['access_token'],
