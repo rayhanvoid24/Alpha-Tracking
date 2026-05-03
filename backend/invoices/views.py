@@ -277,6 +277,9 @@ class ZohoSyncItemsView(APIView):
         
         items = fetch_zoho_items(token.access_token, settings.ZOHO_ORGANIZATION_ID,refresh_token= token.refresh_token)
         print('ZOHO ITEMS RESPONSE:', items)
+        if 'new_access_token' in items:
+          token.access_token = items.pop('new_access_token')
+          token.save()
 
         if 'items' not in items:
             return Response({'error': 'Failed to fetch items'},status= status.HTTP_400_BAD_REQUEST)
