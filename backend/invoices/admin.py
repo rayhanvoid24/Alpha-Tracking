@@ -43,7 +43,7 @@ class ZohoTokenAdmin(admin.ModelAdmin):
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ('product_code', 'name', 'is_active', 'created_at')
+    list_display = ('product_code', 'name', 'is_active')
     search_fields = ('name', 'product_code')
     list_filter = ('is_active',)
 
