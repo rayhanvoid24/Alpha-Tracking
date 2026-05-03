@@ -66,7 +66,7 @@ def refresh_zoho_token(refresh_token):
     })
     return response.json()
 
-def fetch_zoho_items(access_token, organization_id):
+def fetch_zoho_items(access_token, organization_id, refresh_token=None):
     headers = {
         'Authorization': f'Zoho-oauthtoken {access_token}',
     }
@@ -74,4 +74,15 @@ def fetch_zoho_items(access_token, organization_id):
         'organization_id': organization_id,
     }
     response = requests.get(ZOHO_ITEMS_URL, headers=headers, params=params)
-    return response.json()
+    data = response.json()
+
+    # If token expired and we have a refresh token, get a new one
+    if data.get('code') == 57 and refresh_token:
+        new_tokens = refresh_zoho_token(refresh_token)
+        if 'access_token' in new_tokens:
+            headers['Authorization'] = f'Zoho-oauthtoken {new_tokens["access_token"]}'
+            response = requests.get(ZOHO_ITEMS_URL, headers=headers, params=params)
+            data = response.json()
+            data['new_access_token'] = new_tokens['access_token']
+
+    return data

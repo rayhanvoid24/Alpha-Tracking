@@ -275,7 +275,7 @@ class ZohoSyncItemsView(APIView):
         except ZohoToken.DoesNotExist:
             return Response({'error': 'Zoho not connected'}, status= status.HTTP_400_BAD_REQUEST)
         
-        items = fetch_zoho_items(token.access_token, settings.ZOHO_ORGANIZATION_ID)
+        items = fetch_zoho_items(token.access_token, settings.ZOHO_ORGANIZATION_ID,refresh_token= token.refresh_token)
         print('ZOHO ITEMS RESPONSE:', items)
 
         if 'items' not in items:
