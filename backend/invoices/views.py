@@ -5,11 +5,12 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from .serializers import RegisterSerializer, LoginSerializer
-from .models import User,Customer,Invoice
-from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token
+from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder
+from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token, fetch_zoho_items
 from .models import ZohoToken
 from django.shortcuts import redirect
 from django.conf import settings
+
 
 
 
@@ -265,3 +266,35 @@ class InvoiceDeleteView(APIView):
         
         invoice.delete()
         return Response({'message': 'Invoice deleted successfully'}, status=status.HTTP_200_OK)
+    
+
+class ZohoSyncItemsView(APIView):
+    def get(self,request):
+        try:
+            token = ZohoToken.objects.latest('created_at')
+        except ZohoToken.DoesNotExist:
+            return Response({'error': 'Zoho not connected'}, status= status.HTTP_400_BAD_REQUEST)
+        
+        items = fetch_zoho_items(token.access_token, settings.ZOHO_ORGANIZATION_ID)
+
+        if 'items' not in items:
+            return Response({'error': 'Failed to fetch items'},status= status.HTTP_404_NOT_FOUND)
+        
+        synced = 0
+        not_found = []
+        for item in items['items']:
+            item_name = item.get('name', '').strip()
+            zoho_item_id = item.get('item_id', '')
+
+            try:
+                menu_item = MenuItem.objects.get(product_code = item_name)
+                menu_item.zoho_item_id = zoho_item_id
+                menu_item.save()
+                synced +=1
+            except MenuItem.DoesNotExist:
+                not_found.append(item_name)
+
+        return Response({'message': f'synced {synced} items', 
+                        'not_found': not_found}, status= status.HTTP_200_OK
+                
+                )
