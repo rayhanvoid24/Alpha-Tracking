@@ -103,3 +103,47 @@ class ZohoToken(models.Model):
 
     def __str__(self):
         return f'Zoho Token - {self.organization_id}'
+    
+
+class MenuItem(models.Model):
+    name = models.CharField(max_length=200)
+    product_code = models.CharField(max_length=10, unique=True)
+    is_active = models.BooleanField(default=True)
+    zoho_item_id = models.CharField(max_length=100, blank = True, null = True)
+
+    def __str__(self):
+        return f'{self.product_code} - {self.name}'
+
+class Ingredient(models.Model):
+    name = models.CharField(max_length = 100, blank = True)
+    unit = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add= True) 
+
+    def __str__(self):
+        return f'{self.name}  {(self.unit)}'
+    
+class MenuIngredient(models.Model):
+    menu_item = models.ForeignKey(MenuItem, on_delete= models.CASCADE,related_name = "Ingredients")
+    ingredient = models.ForeignKey(Ingredient, on_delete= models.CASCADE)
+    amount_per_portion = models.DecimalField(max_digits= 10, decimal_places= 2)
+    def __str__(self):
+        return f'{self.menu_item.name} → {self.ingredient.name} ({self.amount_per_portion} {self.ingredient.unit})'
+    
+class DeliveryOrder(models.Model):
+    delivery_date = models.DateField()
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def use_by_date(self):
+        from datetime import timedelta
+        return self.delivery_date + timedelta(days=15)
+    
+class DeliveryItem(models.Model):
+    delivery_order = models.ForeignKey(DeliveryOrder, on_delete=models.CASCADE, related_name='items')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ['delivery_order', 'customer', 'menu_item']

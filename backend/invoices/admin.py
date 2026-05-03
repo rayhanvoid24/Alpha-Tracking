@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User
 from .models import ZohoToken
+from .models import MenuItem, Ingredient, MenuIngredient, DeliveryOrder, DeliveryItem
 # Register your models here.
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -39,4 +40,31 @@ class PaymentAdmin(admin.ModelAdmin):
 @admin.register(ZohoToken)
 class ZohoTokenAdmin(admin.ModelAdmin):
     list_display = ('organization_id', 'created_at', 'updated_at')
+
+@admin.register(MenuItem)
+class MenuItemAdmin(admin.ModelAdmin):
+    list_display = ('product_code', 'name', 'is_active', 'created_at')
+    search_fields = ('name', 'product_code')
+    list_filter = ('is_active',)
+
+@admin.register(Ingredient)
+class IngredientAdmin(admin.ModelAdmin):
+    list_display = ('name', 'unit', 'created_at')
+    search_fields = ('name',)
+
+@admin.register(MenuIngredient)
+class MenuIngredientAdmin(admin.ModelAdmin):
+    list_display = ('menu_item', 'ingredient', 'amount_per_portion')
+    search_fields = ('menu_item__name', 'ingredient__name')
+
+@admin.register(DeliveryOrder)
+class DeliveryOrderAdmin(admin.ModelAdmin):
+    list_display = ('delivery_date', 'use_by_date', 'created_by', 'created_at')
+    search_fields = ('delivery_date',)
+
+@admin.register(DeliveryItem)
+class DeliveryItemAdmin(admin.ModelAdmin):
+    list_display = ('delivery_order', 'customer', 'menu_item', 'quantity')
+    search_fields = ('customer__name', 'menu_item__name')
+
 
