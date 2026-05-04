@@ -379,7 +379,7 @@ class DeliveryOrderView(APIView):
         
         # Parse the date
         try:
-            date_obj = datetime.strptime(delivery_date, '%Y-%m-%d').date()
+            date_obj = datetime.strptime(delivery_date,  '%d-%m-%y').date()
         except ValueError:
             return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=status.HTTP_400_BAD_REQUEST)
         
