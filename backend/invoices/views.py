@@ -144,6 +144,7 @@ class ZohoInvoicesView(APIView):
                 name = invoice['customer_name'],
                 defaults={
                  'email': invoice.get('email', ''),
+                 'zoho_contact_id': invoice.get('customer_id', ''),
             }
 
             )
@@ -340,4 +341,122 @@ class ZohoSyncContactsView(APIView):
         return Response({
             'message': f'Synced {synced} contacts',
             'not_found': not_found,
+        }, status=status.HTTP_200_OK)
+    
+class MenuItemView(APIView):
+    #get the active items, so react can display items at the top
+    def get(self,request):
+        items = MenuItem.objects.filter(is_active = True)
+        data = []
+        for item in items:
+            data.append( {
+                'name': item.name,
+                'code': item.product_code,
+                }
+            )
+
+        return Response(data, status= status.HTTP_200_OK)
+    
+class CustomerListView(APIView):
+    def get(self, request):
+        customers = Customer.objects.all()
+        data = []
+        for customer in customers:
+            data.append({
+                'id': customer.id,
+                'name': customer.name,
+                'zoho_contact_id': customer.zoho_contact_id,
+            })
+        return Response(data, status=status.HTTP_200_OK)
+    
+class DeliveryOrderView(APIView):
+    def post(self, request):
+        from datetime import datetime
+        delivery_date = request.data.get('delivery_date')
+        
+        if not delivery_date:
+            return Response({'error': 'Delivery date is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Parse the date
+        try:
+            date_obj = datetime.strptime(delivery_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check it's a Monday
+        if date_obj.weekday() != 0:
+            return Response({'error': 'Delivery date must be a Monday'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get or create the delivery order
+        order, created = DeliveryOrder.objects.get_or_create(
+            delivery_date=date_obj,
+            defaults={'created_by': request.user}
+        )
+        
+        return Response({
+            'id': order.id,
+            'delivery_date': str(order.delivery_date),
+            'use_by_date': str(order.use_by_date),
+            'created': created,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def get(self, request, date=None):
+        if not date:
+            return Response({'error': 'Date is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            order = DeliveryOrder.objects.get(delivery_date=date)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'No delivery order found for this date'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get all items for this order
+        items = DeliveryItem.objects.filter(delivery_order=order)
+        items_data = []
+        for item in items:
+            items_data.append({
+                'customer_id': item.customer.id,
+                'menu_item_id': item.menu_item.id,
+                'quantity': item.quantity,
+            })
+        
+        return Response({
+            'id': order.id,
+            'delivery_date': str(order.delivery_date),
+            'use_by_date': str(order.use_by_date),
+            'items': items_data,
+        }, status=status.HTTP_200_OK)
+    
+# Saves a quantity for a customer x dish cell
+# -----------------------------------------------
+class DeliveryItemView(APIView):
+    def patch(self, request, order_id):
+        customer_id = request.data.get('customer_id')
+        menu_item_id = request.data.get('menu_item_id')
+        quantity = request.data.get('quantity', 0)
+
+        if not customer_id or not menu_item_id:
+            return Response({'error': 'customer_id and menu_item_id are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order = DeliveryOrder.objects.get(id=order_id)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get or create the cell
+        item, created = DeliveryItem.objects.get_or_create(
+            delivery_order=order,
+            customer_id=customer_id,
+            menu_item_id=menu_item_id,
+            defaults={'quantity': quantity}
+        )
+
+        # Update quantity if already exists
+        if not created:
+            item.quantity = quantity
+            item.save()
+
+        return Response({
+            'customer_id': customer_id,
+            'menu_item_id': menu_item_id,
+            'quantity': item.quantity,
         }, status=status.HTTP_200_OK)
