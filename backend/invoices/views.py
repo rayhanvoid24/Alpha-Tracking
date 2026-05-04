@@ -346,7 +346,7 @@ class ZohoSyncContactsView(APIView):
 class MenuItemView(APIView):
     #get the active items, so react can display items at the top
     def get(self,request):
-        items = MenuItem.objects.filter(is_active = True)
+        items = MenuItem.objects.filter(is_active = True).order_by('id')
         data = []
         for item in items:
             data.append( {
