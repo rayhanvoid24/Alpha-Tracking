@@ -350,6 +350,7 @@ class MenuItemView(APIView):
         data = []
         for item in items:
             data.append( {
+                'id': item.id,
                 'name': item.name,
                 'code': item.product_code,
                 }
