@@ -627,8 +627,11 @@ class KitchenPrepView(APIView):
 class GenerateInvoiceView(APIView):
     def post(self, request, order_id, customer_id):
         due_date = request.data.get('due_date')
+        invoice_date = request.data.get('invoice_date')
         if not due_date:
             return Response({'error': 'due_date is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not invoice_date:
+            return Response({'error': 'invoice_date is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             order = DeliveryOrder.objects.get(id=order_id)
@@ -663,8 +666,6 @@ class GenerateInvoiceView(APIView):
         except ZohoToken.DoesNotExist:
             return Response({'error': 'Zoho not connected.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        invoice_date = order.delivery_date + timedelta(days=3)
-
         gst_tax_id = settings.ZOHO_GST_TAX_ID
         line_items = []
         for item in items:
@@ -679,7 +680,7 @@ class GenerateInvoiceView(APIView):
 
         payload = {
             'customer_id': customer.zoho_contact_id,
-            'date': str(invoice_date),
+            'date': invoice_date,
             'due_date': due_date,
             'line_items': line_items,
         }
@@ -710,6 +711,6 @@ class GenerateInvoiceView(APIView):
             'invoice_number': zoho_invoice.get('invoice_number'),
             'zoho_invoice_id': zoho_invoice.get('invoice_id'),
             'customer': customer.name,
-            'invoice_date': str(invoice_date),
+            'invoice_date': invoice_date,
             'due_date': due_date,
         }, status=status.HTTP_201_CREATED)
