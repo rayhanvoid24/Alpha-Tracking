@@ -50,6 +50,7 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add= True)
     zoho_pricebook_id = models.CharField(max_length=50, blank=True, null=True)
     zoho_contact_id = models.CharField(max_length=50, blank=True, null=True)
+    rate = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -149,3 +150,17 @@ class DeliveryItem(models.Model):
 
     class Meta:
         unique_together = ['delivery_order', 'customer', 'menu_item']
+
+
+class GeneratedInvoice(models.Model):
+    delivery_order = models.ForeignKey(DeliveryOrder, on_delete=models.CASCADE, related_name='generated_invoices')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    zoho_invoice_id = models.CharField(max_length=100)
+    invoice_number = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['delivery_order', 'customer']
+
+    def __str__(self):
+        return f'{self.invoice_number} — {self.customer.name}'

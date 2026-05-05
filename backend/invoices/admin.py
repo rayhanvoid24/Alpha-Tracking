@@ -16,7 +16,7 @@ class UserAdmin(BaseUserAdmin):
     ordering = ('email',)
     search_fields = ('email', 'full_name')
 
-from .models import Customer, Invoice, Payment
+from .models import Customer, Invoice, Payment, GeneratedInvoice
 
 # Register Customer model with admin panel
 @admin.register(Customer)
@@ -66,5 +66,10 @@ class DeliveryOrderAdmin(admin.ModelAdmin):
 class DeliveryItemAdmin(admin.ModelAdmin):
     list_display = ('delivery_order', 'customer', 'menu_item', 'quantity')
     search_fields = ('customer__name', 'menu_item__name')
+
+@admin.register(GeneratedInvoice)
+class GeneratedInvoiceAdmin(admin.ModelAdmin):
+    list_display = ('invoice_number', 'customer', 'delivery_order', 'created_at')
+    search_fields = ('invoice_number', 'customer__name')
 
 

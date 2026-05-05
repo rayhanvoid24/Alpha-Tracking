@@ -32,6 +32,7 @@ SECRET_KEY = SECRET_KEY = os.getenv('SECRET_KEY')
 ZOHO_CLIENT_ID = os.getenv('ZOHO_CLIENT_ID')
 ZOHO_CLIENT_SECRET = os.getenv('ZOHO_CLIENT_SECRET')
 ZOHO_ORGANIZATION_ID = os.getenv('ZOHO_ORGANIZATION_ID')
+ZOHO_GST_TAX_ID = os.getenv('ZOHO_GST_TAX_ID')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True

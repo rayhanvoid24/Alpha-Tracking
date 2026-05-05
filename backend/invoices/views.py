@@ -5,11 +5,12 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from .serializers import RegisterSerializer, LoginSerializer
-from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder
-from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token, fetch_zoho_items
+from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder,GeneratedInvoice
+from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token, fetch_zoho_items, create_zoho_invoice
 from .models import ZohoToken
 from django.shortcuts import redirect
 from django.conf import settings
+from datetime import timedelta
 import math
 
 
@@ -368,8 +369,28 @@ class CustomerListView(APIView):
                 'id': customer.id,
                 'name': customer.name,
                 'zoho_contact_id': customer.zoho_contact_id,
+                'rate': str(customer.rate) if customer.rate is not None else None,
             })
         return Response(data, status=status.HTTP_200_OK)
+
+
+class CustomerUpdateView(APIView):
+    def patch(self, request, id):
+        try:
+            customer = Customer.objects.get(id=id)
+        except Customer.DoesNotExist:
+            return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        rate = request.data.get('rate')
+        if rate is not None:
+            customer.rate = rate
+        customer.save()
+
+        return Response({
+            'id': customer.id,
+            'name': customer.name,
+            'rate': str(customer.rate) if customer.rate is not None else None,
+        }, status=status.HTTP_200_OK)
     
 class DeliveryOrderView(APIView):
     def post(self, request):
@@ -421,11 +442,16 @@ class DeliveryOrderView(APIView):
                 'quantity': item.quantity,
             })
         
+        invoiced_ids = list(
+            GeneratedInvoice.objects.filter(delivery_order=order).values_list('customer_id', flat=True)
+        )
+
         return Response({
             'id': order.id,
             'delivery_date': str(order.delivery_date),
             'use_by_date': str(order.use_by_date),
             'items': items_data,
+            'invoiced_customer_ids': invoiced_ids,
         }, status=status.HTTP_200_OK)
     
 # Saves a quantity for a customer x dish cell
@@ -596,3 +622,94 @@ class KitchenPrepView(APIView):
                 'bolognese': bolognese_mince,
             },
         }, status=status.HTTP_200_OK)
+
+
+class GenerateInvoiceView(APIView):
+    def post(self, request, order_id, customer_id):
+        due_date = request.data.get('due_date')
+        if not due_date:
+            return Response({'error': 'due_date is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order = DeliveryOrder.objects.get(id=order_id)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            customer = Customer.objects.get(id=customer_id)
+        except Customer.DoesNotExist:
+            return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not customer.zoho_contact_id:
+            return Response({'error': f'{customer.name} has no Zoho contact ID. Run Zoho contact sync first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if customer.rate is None:
+            return Response({'error': f'{customer.name} has no rate set. Set a rate in Settings first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if GeneratedInvoice.objects.filter(delivery_order=order, customer=customer).exists():
+            return Response({'error': 'Invoice already generated for this customer and delivery.'}, status=status.HTTP_409_CONFLICT)
+
+        items = DeliveryItem.objects.filter(delivery_order=order, customer=customer, quantity__gt=0).select_related('menu_item')
+
+        if not items.exists():
+            return Response({'error': f'{customer.name} has no items in this delivery order.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        missing_zoho_id = [item.menu_item.name for item in items if not item.menu_item.zoho_item_id]
+        if missing_zoho_id:
+            return Response({'error': f'These items are missing Zoho item IDs: {", ".join(missing_zoho_id)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            token = ZohoToken.objects.latest('created_at')
+        except ZohoToken.DoesNotExist:
+            return Response({'error': 'Zoho not connected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        invoice_date = order.delivery_date + timedelta(days=3)
+
+        gst_tax_id = settings.ZOHO_GST_TAX_ID
+        line_items = []
+        for item in items:
+            line_item = {
+                'item_id': item.menu_item.zoho_item_id,
+                'quantity': item.quantity,
+                'rate': float(customer.rate),
+            }
+            if gst_tax_id:
+                line_item['tax_id'] = gst_tax_id
+            line_items.append(line_item)
+
+        payload = {
+            'customer_id': customer.zoho_contact_id,
+            'date': str(invoice_date),
+            'due_date': due_date,
+            'line_items': line_items,
+        }
+
+        result = create_zoho_invoice(
+            token.access_token,
+            settings.ZOHO_ORGANIZATION_ID,
+            payload,
+            refresh_token=token.refresh_token,
+        )
+
+        if 'new_access_token' in result:
+            token.access_token = result.pop('new_access_token')
+            token.save()
+
+        if result.get('code') != 0:
+            return Response({'error': f'Zoho error: {result.get("message", "Unknown error")}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        zoho_invoice = result.get('invoice', {})
+        GeneratedInvoice.objects.create(
+            delivery_order=order,
+            customer=customer,
+            zoho_invoice_id=zoho_invoice.get('invoice_id', ''),
+            invoice_number=zoho_invoice.get('invoice_number', ''),
+        )
+
+        return Response({
+            'invoice_number': zoho_invoice.get('invoice_number'),
+            'zoho_invoice_id': zoho_invoice.get('invoice_id'),
+            'customer': customer.name,
+            'invoice_date': str(invoice_date),
+            'due_date': due_date,
+        }, status=status.HTTP_201_CREATED)
