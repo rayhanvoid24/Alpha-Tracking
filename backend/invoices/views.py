@@ -544,7 +544,7 @@ class KitchenPrepView(APIView):
             pesto_sauce = 3.0
 
         # ── Step 7: Pasta calculations ──
-        penne = math.ceil(totals.get('1007', 0) / 6.25)
+        penne = math.ceil((totals.get('1007', 0) / 6.25) -2)
         casarecce = max(0, round_up((totals.get('2005', 0) / 7.25) - 1, 0.5))
         pea_risotto = round_up(totals.get('2003', 0) * 290 / 4700, 0.25)
         spaghetti = round_up(totals.get('1389', 0) * 80 / 1000, 0.5)
