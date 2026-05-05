@@ -10,6 +10,7 @@ from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoic
 from .models import ZohoToken
 from django.shortcuts import redirect
 from django.conf import settings
+import math
 
 
 
@@ -460,4 +461,131 @@ class DeliveryItemView(APIView):
             'customer_id': customer_id,
             'menu_item_id': menu_item_id,
             'quantity': item.quantity,
+        }, status=status.HTTP_200_OK)
+    
+# Takes delivery order ID, calculates all kitchen prep quantities
+# Returns structured data for Page 2 display
+
+class KitchenPrepView(APIView):
+    def get(self, request, order_id):
+        # ── Step 1: Get the delivery order ──
+        try:
+            order = DeliveryOrder.objects.get(id=order_id)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # ── Step 2: Sum quantities per product code ──
+        # Build a dictionary like {'1001': 54, '2005': 44, ...}
+        items = DeliveryItem.objects.filter(delivery_order=order)
+        totals = {}
+        for item in items:
+            code = item.menu_item.product_code
+            totals[code] = totals.get(code, 0) + item.quantity
+
+        # ── Helper: round up to nearest X ──
+        
+        def round_up(value, nearest):
+            return math.ceil(value / nearest) * nearest
+
+        # ── Step 3: Rice calculations ──
+        white_rice = round_up(
+            (totals.get('2004', 0) + totals.get('1006', 0)) / 19, 0.5
+        )
+        leb_rice = round_up(totals.get('2002', 0) / 14, 0.5)
+        jasmine_rice = round_up(
+            (totals.get('1008', 0) + totals.get('4002', 0) + totals.get('3004', 0) + totals.get('3005', 0)) / 16
+            + (totals.get('2006', 0) / 14), 0.5
+        )
+
+        # ── Step 4: Chicken calculations ──
+        chicken_thigh_tikka = round_up(totals.get('2004', 0) * 0.14, 0.5)
+        chicken_thigh_curry = round_up((totals.get('3004', 0) + totals.get('3005', 0)) * 0.15, 0.5)
+        chicken_breast_leb = round_up(totals.get('2002', 0) * 0.13, 1)
+        chicken_breast_sliced = round_up((totals.get('2005', 0) + totals.get('2003', 0)) / 14 * 2, 1)
+        chicken_thigh_mince = round_up(totals.get('2006', 0) * 0.15 * 1.15 + 0.5, 0.1)
+
+        # ── Step 5: Tray calculations (needed for sauces) ──
+        def get_trays(total, portions_per_tray=12):
+            trays = total // portions_per_tray
+            leftover = total % portions_per_tray
+            if leftover > 0 and leftover <= 6:
+                trays += 0.5
+            elif leftover > 6:
+                trays += 1
+            return trays
+
+        trays_1001 = get_trays(totals.get('1001', 0))
+        trays_3003 = get_trays(totals.get('3003', 0))
+
+        # ── Step 6: Sauce calculations ──
+        napoletane = round_up(trays_3003 / 0.5, 0.5)
+        bechamel = trays_1001 * 1
+
+        tikka_total = totals.get('2004', 0)
+        if tikka_total < 12:
+            tikka_sauce = 1.0
+        elif tikka_total <= 23:
+            tikka_sauce = 2.0
+        elif tikka_total <= 31:
+            tikka_sauce = 2.5
+        elif tikka_total <= 64:
+            tikka_sauce = 5.0
+        else:
+            tikka_sauce = 7.5
+
+        pesto_total = totals.get('2005', 0)
+        if pesto_total < 50:
+            pesto_sauce = 1.65
+        elif pesto_total <= 59:
+            pesto_sauce = 2.0
+        elif pesto_total <= 79:
+            pesto_sauce = 2.5
+        else:
+            pesto_sauce = 3.0
+
+        # ── Step 7: Pasta calculations ──
+        penne = math.ceil(totals.get('1007', 0) / 6.25)
+        casarecce = round_up((totals.get('2005', 0) / 7.25) - 1, 0.5)
+        pea_risotto = round_up(totals.get('2003', 0) * 290 / 4700, 0.25)
+
+        # ── Step 8: Beef mince calculations ──
+        chili_mince = totals.get('1006', 0) * 100
+        leb_mince = totals.get('2002', 0) * 70
+        total_mince = chili_mince + leb_mince + 2000
+        bolognese_mince = total_mince - chili_mince - leb_mince
+
+        # ── Step 9: Return everything ──
+        return Response({
+            'delivery_date': str(order.delivery_date),
+            'use_by_date': str(order.use_by_date),
+            'totals': totals,
+            'rice': {
+                'white_rice': white_rice,
+                'leb_rice': leb_rice,
+                'jasmine_rice': jasmine_rice,
+            },
+            'chicken': {
+                'thigh_tikka': chicken_thigh_tikka,
+                'thigh_curry': chicken_thigh_curry,
+                'breast_leb': chicken_breast_leb,
+                'breast_sliced': chicken_breast_sliced,
+                'thigh_mince': chicken_thigh_mince,
+            },
+            'sauces': {
+                'napoletane': napoletane,
+                'bechamel': bechamel,
+                'tikka': tikka_sauce,
+                'pesto': pesto_sauce,
+            },
+            'pasta': {
+                'penne': penne,
+                'casarecce': casarecce,
+                'pea_risotto': pea_risotto,
+            },
+            'beef_mince': {
+                'chili': chili_mince,
+                'leb_rice': leb_mince,
+                'total': total_mince,
+                'bolognese': bolognese_mince,
+            },
         }, status=status.HTTP_200_OK)
