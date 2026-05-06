@@ -115,6 +115,27 @@ def create_zoho_invoice(access_token, organization_id, payload, refresh_token=No
     return data
 
 
+def delete_zoho_invoice(access_token, organization_id, invoice_id, refresh_token=None):
+    headers = {
+        'Authorization': f'Zoho-oauthtoken {access_token}',
+    }
+    params = {
+        'organization_id': organization_id,
+    }
+    response = requests.delete(f'{ZOHO_INVOICES_URL}/{invoice_id}', headers=headers, params=params)
+    data = response.json()
+
+    if data.get('code') == 57 and refresh_token:
+        new_tokens = refresh_zoho_token(refresh_token)
+        if 'access_token' in new_tokens:
+            headers['Authorization'] = f'Zoho-oauthtoken {new_tokens["access_token"]}'
+            response = requests.delete(f'{ZOHO_INVOICES_URL}/{invoice_id}', headers=headers, params=params)
+            data = response.json()
+            data['new_access_token'] = new_tokens['access_token']
+
+    return data
+
+
 def fetch_zoho_contacts(access_token, organization_id, refresh_token=None):
     headers = {
         'Authorization': f'Zoho-oauthtoken {access_token}',

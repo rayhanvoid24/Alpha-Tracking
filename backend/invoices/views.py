@@ -5,8 +5,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from .serializers import RegisterSerializer, LoginSerializer
-from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder,GeneratedInvoice
-from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token, fetch_zoho_items, create_zoho_invoice
+from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder,GeneratedInvoice,SleeveInventory
+from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token, fetch_zoho_items, create_zoho_invoice, delete_zoho_invoice
 from .models import ZohoToken
 from django.shortcuts import redirect
 from django.conf import settings
@@ -450,6 +450,7 @@ class DeliveryOrderView(APIView):
             'id': order.id,
             'delivery_date': str(order.delivery_date),
             'use_by_date': str(order.use_by_date),
+            'is_delivered': order.is_delivered,
             'items': items_data,
             'invoiced_customer_ids': invoiced_ids,
         }, status=status.HTTP_200_OK)
@@ -714,3 +715,116 @@ class GenerateInvoiceView(APIView):
             'invoice_date': invoice_date,
             'due_date': due_date,
         }, status=status.HTTP_201_CREATED)
+
+    def delete(self, request, order_id, customer_id):
+        try:
+            order = DeliveryOrder.objects.get(id=order_id)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            customer = Customer.objects.get(id=customer_id)
+        except Customer.DoesNotExist:
+            return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            generated = GeneratedInvoice.objects.get(delivery_order=order, customer=customer)
+        except GeneratedInvoice.DoesNotExist:
+            return Response({'error': 'No generated invoice found for this customer and delivery.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            token = ZohoToken.objects.latest('created_at')
+        except ZohoToken.DoesNotExist:
+            return Response({'error': 'Zoho not connected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = delete_zoho_invoice(
+            token.access_token,
+            settings.ZOHO_ORGANIZATION_ID,
+            generated.zoho_invoice_id,
+            refresh_token=token.refresh_token,
+        )
+
+        if 'new_access_token' in result:
+            token.access_token = result.pop('new_access_token')
+            token.save()
+
+        if result.get('code') != 0:
+            return Response({'error': f'Zoho error: {result.get("message", "Unknown error")}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        generated.delete()
+        return Response({'message': 'Invoice deleted successfully'}, status=status.HTTP_200_OK)
+
+
+class SleeveInventoryView(APIView):
+    def get(self, request):
+        menu_items = MenuItem.objects.filter(is_active=True).order_by('product_code')
+        result = []
+        for item in menu_items:
+            inv, _ = SleeveInventory.objects.get_or_create(menu_item=item)
+            result.append({
+                'menu_item_id': item.id,
+                'product_code': item.product_code,
+                'name': item.name,
+                'quantity': inv.quantity,
+            })
+        return Response(result, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        updates = request.data
+        if not isinstance(updates, list):
+            return Response({'error': 'Expected a list of {menu_item_id, quantity}'}, status=status.HTTP_400_BAD_REQUEST)
+        for update in updates:
+            mid = update.get('menu_item_id')
+            qty = update.get('quantity')
+            if mid is None or qty is None:
+                continue
+            try:
+                qty = max(0, int(qty))
+            except (TypeError, ValueError):
+                continue
+            inv, _ = SleeveInventory.objects.get_or_create(menu_item_id=mid)
+            inv.quantity = qty
+            inv.save()
+        return Response({'message': 'Inventory saved.'}, status=status.HTTP_200_OK)
+
+
+class ResetSleeveInventoryView(APIView):
+    def post(self, request):
+        SleeveInventory.objects.all().update(quantity=0)
+        return Response({'message': 'Inventory reset to 0.'}, status=status.HTTP_200_OK)
+
+
+class MarkDeliveredView(APIView):
+    def post(self, request, order_id):
+        try:
+            order = DeliveryOrder.objects.get(id=order_id)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.is_delivered:
+            return Response({'error': 'This delivery has already been marked as delivered.'}, status=status.HTTP_409_CONFLICT)
+
+        items = DeliveryItem.objects.filter(delivery_order=order, quantity__gt=0).select_related('menu_item')
+
+        totals = {}
+        for item in items:
+            totals[item.menu_item_id] = totals.get(item.menu_item_id, 0) + item.quantity
+
+        for menu_item_id, qty in totals.items():
+            inv, _ = SleeveInventory.objects.get_or_create(menu_item_id=menu_item_id)
+            inv.quantity = max(0, inv.quantity - qty)
+            inv.save()
+
+        order.is_delivered = True
+        order.save()
+
+        inventory = SleeveInventory.objects.select_related('menu_item').filter(menu_item__is_active=True).order_by('menu_item__product_code')
+        inventory_data = [
+            {'menu_item_id': inv.menu_item_id, 'name': inv.menu_item.name, 'quantity': inv.quantity}
+            for inv in inventory
+        ]
+
+        return Response({
+            'message': 'Delivery marked as complete. Inventory updated.',
+            'inventory': inventory_data,
+        }, status=status.HTTP_200_OK)

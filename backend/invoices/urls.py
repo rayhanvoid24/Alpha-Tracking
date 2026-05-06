@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import RegisterView, LoginView,ZohoConnectView,ZohoCallbackView,ZohoInvoicesView,InvoiceListView,InvoiceUpdateView,CreateInvoiceView,InvoiceDeleteView,ZohoSyncItemsView,ZohoSyncContactsView
 from .views import MenuItemView,CustomerListView,CustomerUpdateView,DeliveryItemView,DeliveryOrderView,KitchenPrepView,GenerateInvoiceView
+from .views import SleeveInventoryView,ResetSleeveInventoryView,MarkDeliveredView
 # All auth related URLs
 # Each path connects a URL to a view
 
@@ -28,5 +29,7 @@ urlpatterns = [
     path('delivery/<int:order_id>/item/', DeliveryItemView.as_view()),
     path('delivery/<int:order_id>/kitchen-prep/', KitchenPrepView.as_view()),
     path('delivery/<int:order_id>/generate-invoice/<int:customer_id>/', GenerateInvoiceView.as_view()),
-    
+    path('delivery/<int:order_id>/deliver/', MarkDeliveredView.as_view()),
+    path('inventory/', SleeveInventoryView.as_view()),
+    path('inventory/reset/', ResetSleeveInventoryView.as_view()),
 ]

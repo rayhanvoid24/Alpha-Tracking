@@ -136,6 +136,7 @@ class DeliveryOrder(models.Model):
     delivery_date = models.DateField()
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_delivered = models.BooleanField(default=False)
 
     @property
     def use_by_date(self):
@@ -164,3 +165,12 @@ class GeneratedInvoice(models.Model):
 
     def __str__(self):
         return f'{self.invoice_number} — {self.customer.name}'
+
+
+class SleeveInventory(models.Model):
+    menu_item = models.OneToOneField(MenuItem, on_delete=models.CASCADE, related_name='sleeve_inventory')
+    quantity = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.menu_item.name} — {self.quantity} sleeves'
