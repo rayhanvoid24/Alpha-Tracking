@@ -41,7 +41,7 @@ def fetch_zoho_invoices(access_token, organization_id, refresh_token=None):
         'date_start': '2026-03-15',
         'sort_column': 'date',
         'sort_order': 'D',
-        'status': 'all',
+        'filter_by': 'Status.All',
     }
     response = requests.get(ZOHO_INVOICES_URL, headers=headers, params=params)
     data = response.json()
