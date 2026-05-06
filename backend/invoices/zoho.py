@@ -11,7 +11,7 @@ ZOHO_CONTACTS_URL = 'https://www.zohoapis.com.au/books/v3/contacts'
 # Step 1 — Generate the URL that redirects the user/to Zoho's login page to grant access
 def get_zoho_auth_url():
     params = {
-        'scope': 'ZohoBooks.invoices.READ,ZohoBooks.invoices.CREATE,ZohoBooks.settings.READ,ZohoBooks.contacts.READ',
+        'scope': 'ZohoBooks.invoices.READ,ZohoBooks.invoices.CREATE,ZohoBooks.settings.READ,ZohoBooks.contacts.READ,ZohoBooks.invoices.DELETE',
         'client_id': settings.ZOHO_CLIENT_ID,
         'response_type': 'code',
         'redirect_uri': 'https://alpha-tracking.onrender.com/api/zoho/callback/',
@@ -41,6 +41,7 @@ def fetch_zoho_invoices(access_token, organization_id, refresh_token=None):
         'date_start': '2026-03-15',
         'sort_column': 'date',
         'sort_order': 'D',
+        'status': 'all',
     }
     response = requests.get(ZOHO_INVOICES_URL, headers=headers, params=params)
     data = response.json()
