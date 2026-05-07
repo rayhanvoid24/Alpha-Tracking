@@ -5,7 +5,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from .serializers import RegisterSerializer, LoginSerializer
-from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder,GeneratedInvoice,SleeveInventory
+from .models import User,Customer,Invoice,MenuItem,MenuIngredient,DeliveryItem,DeliveryOrder,GeneratedInvoice,SleeveInventory,CustomDeliveryEntry
+from django.db import transaction
 from .zoho import get_zoho_auth_url, exchange_code_for_tokens, fetch_zoho_invoices, refresh_zoho_token, fetch_zoho_items, create_zoho_invoice, delete_zoho_invoice
 from .models import ZohoToken
 from django.shortcuts import redirect
@@ -433,14 +434,19 @@ class DeliveryOrderView(APIView):
             return Response({'error': 'No delivery order found for this date'}, status=status.HTTP_404_NOT_FOUND)
         
         # Get all items for this order
-        items = DeliveryItem.objects.filter(delivery_order=order)
+        items = DeliveryItem.objects.filter(delivery_order=order).select_related('customer', 'custom_entry', 'menu_item')
         items_data = []
         for item in items:
-            items_data.append({
-                'customer_id': item.customer.id,
+            entry = {
                 'menu_item_id': item.menu_item.id,
                 'quantity': item.quantity,
-            })
+            }
+            if item.customer_id:
+                entry['customer_id'] = item.customer.id
+            else:
+                entry['custom_entry_id'] = item.custom_entry.id
+                entry['custom_entry_name'] = item.custom_entry.name
+            items_data.append(entry)
         
         invoiced_ids = list(
             GeneratedInvoice.objects.filter(delivery_order=order).values_list('customer_id', flat=True)
@@ -490,6 +496,74 @@ class DeliveryItemView(APIView):
             'quantity': item.quantity,
         }, status=status.HTTP_200_OK)
     
+# Bulk save all delivery items for an order in one transaction
+# -----------------------------------------------
+class BulkSaveDeliveryView(APIView):
+    def post(self, request, order_id):
+        try:
+            order = DeliveryOrder.objects.get(id=order_id)
+        except DeliveryOrder.DoesNotExist:
+            return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        items = request.data.get('items', [])
+
+        with transaction.atomic():
+            DeliveryItem.objects.filter(delivery_order=order).delete()
+            CustomDeliveryEntry.objects.filter(delivery_order=order).delete()
+
+            custom_entry_cache = {}
+            for item in items:
+                qty = item.get('quantity', 0)
+                if qty <= 0:
+                    continue
+                menu_item_id = item.get('menu_item_id')
+                if item.get('customer_id'):
+                    DeliveryItem.objects.create(
+                        delivery_order=order,
+                        customer_id=item['customer_id'],
+                        menu_item_id=menu_item_id,
+                        quantity=qty,
+                    )
+                elif item.get('custom_name'):
+                    name = item['custom_name']
+                    if name not in custom_entry_cache:
+                        custom_entry_cache[name] = CustomDeliveryEntry.objects.create(
+                            delivery_order=order,
+                            name=name,
+                        )
+                    DeliveryItem.objects.create(
+                        delivery_order=order,
+                        custom_entry=custom_entry_cache[name],
+                        menu_item_id=menu_item_id,
+                        quantity=qty,
+                    )
+
+        # Return the saved state in the same shape as GET /delivery/<date>/
+        saved_items = DeliveryItem.objects.filter(delivery_order=order).select_related('customer', 'custom_entry', 'menu_item')
+        items_data = []
+        for item in saved_items:
+            entry = {'menu_item_id': item.menu_item.id, 'quantity': item.quantity}
+            if item.customer_id:
+                entry['customer_id'] = item.customer.id
+            else:
+                entry['custom_entry_id'] = item.custom_entry.id
+                entry['custom_entry_name'] = item.custom_entry.name
+            items_data.append(entry)
+
+        invoiced_ids = list(
+            GeneratedInvoice.objects.filter(delivery_order=order).values_list('customer_id', flat=True)
+        )
+
+        return Response({
+            'id': order.id,
+            'delivery_date': str(order.delivery_date),
+            'use_by_date': str(order.use_by_date),
+            'is_delivered': order.is_delivered,
+            'items': items_data,
+            'invoiced_customer_ids': invoiced_ids,
+        }, status=status.HTTP_200_OK)
+
+
 # Takes delivery order ID, calculates all kitchen prep quantities
 # Returns structured data for Page 2 display
 

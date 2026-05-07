@@ -143,14 +143,23 @@ class DeliveryOrder(models.Model):
         from datetime import timedelta
         return self.delivery_date + timedelta(days=15)
     
-class DeliveryItem(models.Model):
-    delivery_order = models.ForeignKey(DeliveryOrder, on_delete=models.CASCADE, related_name='items')
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
-    menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
-    quantity = models.IntegerField(default=0)
+class CustomDeliveryEntry(models.Model):
+    delivery_order = models.ForeignKey(DeliveryOrder, on_delete=models.CASCADE, related_name='custom_entries')
+    name = models.CharField(max_length=200)
 
     class Meta:
-        unique_together = ['delivery_order', 'customer', 'menu_item']
+        unique_together = ['delivery_order', 'name']
+
+    def __str__(self):
+        return f'{self.name} ({self.delivery_order.delivery_date})'
+
+
+class DeliveryItem(models.Model):
+    delivery_order = models.ForeignKey(DeliveryOrder, on_delete=models.CASCADE, related_name='items')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
+    custom_entry = models.ForeignKey(CustomDeliveryEntry, on_delete=models.CASCADE, null=True, blank=True)
+    menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=0)
 
 
 class GeneratedInvoice(models.Model):

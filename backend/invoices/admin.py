@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User
 from .models import ZohoToken
-from .models import MenuItem, Ingredient, MenuIngredient, DeliveryOrder, DeliveryItem, SleeveInventory
+from .models import MenuItem, Ingredient, MenuIngredient, DeliveryOrder, DeliveryItem, CustomDeliveryEntry, SleeveInventory
 # Register your models here.
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -62,10 +62,15 @@ class DeliveryOrderAdmin(admin.ModelAdmin):
     list_display = ('delivery_date', 'use_by_date', 'created_by', 'created_at')
     search_fields = ('delivery_date',)
 
+@admin.register(CustomDeliveryEntry)
+class CustomDeliveryEntryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'delivery_order')
+    search_fields = ('name',)
+
 @admin.register(DeliveryItem)
 class DeliveryItemAdmin(admin.ModelAdmin):
-    list_display = ('delivery_order', 'customer', 'menu_item', 'quantity')
-    search_fields = ('customer__name', 'menu_item__name')
+    list_display = ('delivery_order', 'customer', 'custom_entry', 'menu_item', 'quantity')
+    search_fields = ('customer__name', 'custom_entry__name', 'menu_item__name')
 
 @admin.register(GeneratedInvoice)
 class GeneratedInvoiceAdmin(admin.ModelAdmin):
