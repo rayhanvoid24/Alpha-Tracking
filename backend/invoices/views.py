@@ -648,7 +648,7 @@ class KitchenPrepView(APIView):
         penne = math.ceil((totals.get('1007', 0) / 6.25) -2)
         casarecce = max(0, round_up((totals.get('2005', 0) / 7.25) - 1, 0.5))
         pea_risotto = round_up(totals.get('2003', 0) * 290 / 4700, 0.25)
-        spaghetti = round_up(totals.get('1389', 0) * 80 / 1000, 0.5)
+        spaghetti = round_up(totals.get('1389', 0) * 80 / 1000, 0.1)
 
         # ── Step 8: Beef mince calculations ──
         chili_mince = totals.get('1006', 0) * 100
@@ -691,10 +691,10 @@ class KitchenPrepView(APIView):
                 'pea_risotto': pea_risotto,
             },
             'beef_mince': {
-                'chili': chili_mince,
-                'leb_rice': leb_mince,
-                'total': total_mince,
-                'bolognese': bolognese_mince,
+                'chili': round_up(chili_mince / 1000, 0.5),
+                'leb_rice': round_up(leb_mince / 1000, 0.5),
+                'total': total_mince / 1000,
+                'bolognese': bolognese_mince / 1000,
             },
         }, status=status.HTTP_200_OK)
 
