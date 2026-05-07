@@ -355,6 +355,13 @@ export default function CalculatorPage() {
     const doc = new jsPDF('landscape');
     doc.setFontSize(14);
     doc.text(`DELIVERY ${deliveryDate}`, 14, 15);
+
+    const hexToRgb = (hex) => [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
+
     const headers = ['CUSTOMER', ...menuItems.map(i => `${i.name}\n${i.code}`), 'TOTAL'];
     const rows = tableCustomers.map(customer => [
       customer.name,
@@ -366,16 +373,33 @@ export default function CalculatorPage() {
       ...menuItems.map(item => getColumnTotal(item.id) || ''),
       getGrandTotal() || '',
     ]);
+
+    const margin = 14;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const tableWidth = pageWidth - margin * 2;
+    const customerColWidth = 40;
+    const totalColWidth = 14;
+    const itemColWidth = (tableWidth - customerColWidth - totalColWidth) / menuItems.length;
+
+    const columnStyles = { 0: { cellWidth: customerColWidth }, [menuItems.length + 1]: { cellWidth: totalColWidth } };
+    menuItems.forEach((_, i) => { columnStyles[i + 1] = { cellWidth: itemColWidth, halign: 'center' }; });
+
     autoTable(doc, {
       head: [headers],
       body: rows,
       startY: 20,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [44, 62, 80] },
+      margin: { left: margin, right: margin },
+      tableWidth,
+      styles: { fontSize: 7, cellPadding: 1.5, lineWidth: 0.2, lineColor: [0, 0, 0] },
+      headStyles: { fillColor: [44, 62, 80], lineWidth: 0.2, lineColor: [0, 0, 0] },
+      columnStyles,
       didParseCell: (data) => {
+        if (data.section !== 'body') return;
         if (data.row.index === rows.length - 1) {
           data.cell.styles.fillColor = [243, 156, 18];
           data.cell.styles.fontStyle = 'bold';
+        } else {
+          data.cell.styles.fillColor = hexToRgb(getRowColor(data.row.index));
         }
       }
     });
