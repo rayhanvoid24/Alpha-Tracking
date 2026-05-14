@@ -323,6 +323,16 @@ export default function CalculatorPage() {
     return tableCustomers.reduce((total, customer) => total + getRowTotal(customer.id), 0);
   };
 
+  // ─── Box count ────────────────────────────────────────────────
+  // 1 box holds 16 portions. Returns "boxes / leftover" e.g. "1 / 4".
+  // Returns '' for 0 so empty cells stay blank.
+  const boxCount = (qty) => {
+    if (!qty) return '';
+    const boxes = Math.floor(qty / 16);
+    const left = qty % 16;
+    return `${boxes} / ${left}`;
+  };
+
   // ─── Tray calculation ─────────────────────────────────────────
   // Add product codes here if more items need tray calculations
   const TRAY_ITEMS = {
@@ -350,60 +360,149 @@ export default function CalculatorPage() {
     return colors[index % colors.length];
   };
 
-  // ─── Export to PDF ────────────────────────────────────────────
+  // ─── Export Delivery Table to PDF ────────────────────────────
+  // Opens a preview in a new browser tab (use browser's download button to save).
+  // To tweak sizing: fontSize + cellPadding in styles{}, column widths below.
+  // To tweak layout: customerColWidth, totalColWidth, startY.
   const exportPDF = () => {
     const doc = new jsPDF('landscape');
-    doc.setFontSize(14);
+
+    // ── Header ──
+    doc.setFontSize(16);
     doc.text(`DELIVERY ${deliveryDate}`, 14, 15);
 
+    // Use by date line — shifts table start down if present
+    let tableStartY = 22;
+    if (useByDate) {
+      doc.setFontSize(11);
+      doc.text(`USE BY DATE: ${new Date(useByDate).toLocaleDateString('en-AU')}`, 14, 22);
+      tableStartY = 29;
+    }
+
+    // ── Helpers ──
     const hexToRgb = (hex) => [
       parseInt(hex.slice(1, 3), 16),
       parseInt(hex.slice(3, 5), 16),
       parseInt(hex.slice(5, 7), 16),
     ];
 
-    const headers = ['CUSTOMER', ...menuItems.map(i => `${i.name}\n${i.code}`), 'TOTAL'];
+    // ── Table data ──
+    // Column order: CUSTOMER | ...items | TOTAL | BOXES
+    const headers = ['CUSTOMER', ...menuItems.map(i => `${i.name}\n${i.code}`), 'TOTAL', 'BOXES'];
+    const totalColIdx = menuItems.length + 1; // green column
+    const boxesColIdx = headers.length - 1;   // yellow column
+
     const rows = tableCustomers.map(customer => [
       customer.name,
       ...menuItems.map(item => quantities[`${customer.id}-${item.id}`] || ''),
       getRowTotal(customer.id) || '',
+      boxCount(getRowTotal(customer.id)), // boxes for this customer
     ]);
+
+    // TOTAL row (orange) — index tableCustomers.length
+    // BOXES cell sums full boxes from each customer row individually (not Math.floor of grand total),
+    // so it stays consistent with what you'd get adding up the BOXES column yourself.
+    const totalFullBoxes = tableCustomers.reduce((sum, c) => sum + Math.floor(getRowTotal(c.id) / 16), 0);
     rows.push([
       'TOTAL',
       ...menuItems.map(item => getColumnTotal(item.id) || ''),
       getGrandTotal() || '',
+      `${totalFullBoxes}/`,
     ]);
 
+    // Quantity Prepared row (green) — index tableCustomers.length + 1
+    // Mirrors the on-screen tray row; TOTAL + BOXES cells left empty.
+    rows.push([
+      'Quantity Prepared',
+      ...menuItems.map(item => getTrays(item.code, getColumnTotal(item.id))),
+      '',
+      '',
+    ]);
+
+    const totalsRowIdx = tableCustomers.length;     // orange
+    const qtyPrepRowIdx = tableCustomers.length + 1; // green
+
+    // ── Column widths ──
+    // Fixed columns are kept narrow to maximise space for the 15 item columns.
+    // Tweak these if customer names get clipped or item headers are still squashed.
     const margin = 14;
     const pageWidth = doc.internal.pageSize.getWidth();
     const tableWidth = pageWidth - margin * 2;
-    const customerColWidth = 40;
-    const totalColWidth = 14;
-    const itemColWidth = (tableWidth - customerColWidth - totalColWidth) / menuItems.length;
+    const customerColWidth = 38; // reduced from 48 to free space for item columns
+    const totalColWidth = 13;    // reduced from 17
+    const boxesColWidth = 15;    // reduced from 20
+    const itemColWidth = (tableWidth - customerColWidth - totalColWidth - boxesColWidth) / menuItems.length;
 
-    const columnStyles = { 0: { cellWidth: customerColWidth }, [menuItems.length + 1]: { cellWidth: totalColWidth } };
+    const columnStyles = {
+      0: { cellWidth: customerColWidth },
+      [menuItems.length + 1]: { cellWidth: totalColWidth },
+      [menuItems.length + 2]: { cellWidth: boxesColWidth, halign: 'center' }, // BOXES
+    };
     menuItems.forEach((_, i) => { columnStyles[i + 1] = { cellWidth: itemColWidth, halign: 'center' }; });
 
+    // ── Render table ──
+    // Body fontSize / cellPadding scale cell size uniformly — bump both by the same % to resize.
+    // headStyles fontSize is kept smaller so the two-line item headers (name + code) fit without squashing.
     autoTable(doc, {
       head: [headers],
       body: rows,
-      startY: 20,
+      startY: tableStartY,
       margin: { left: margin, right: margin },
       tableWidth,
-      styles: { fontSize: 7, cellPadding: 1.5, lineWidth: 0.2, lineColor: [0, 0, 0] },
-      headStyles: { fillColor: [44, 62, 80], lineWidth: 0.2, lineColor: [0, 0, 0] },
+      styles: { fontSize: 8.4, cellPadding: 1.8, lineWidth: 0.2, lineColor: [0, 0, 0] },
+      headStyles: { fillColor: [44, 62, 80], lineWidth: 0.2, lineColor: [0, 0, 0], fontSize: 6.5, cellPadding: 1.2 },
       columnStyles,
       didParseCell: (data) => {
-        if (data.section !== 'body') return;
-        if (data.row.index === rows.length - 1) {
+        // BOXES column — yellow in header + body, always takes priority
+        if (data.column.index === boxesColIdx) {
+          data.cell.styles.fillColor = [255, 241, 118];
+          data.cell.styles.textColor = [0, 0, 0];
+          if (data.section === 'body' && data.cell.raw !== '') {
+            data.cell.styles.fontStyle = 'bold';
+          }
+          return;
+        }
+
+        // TOTAL column header — green
+        if (data.section === 'head') {
+          if (data.column.index === totalColIdx) {
+            data.cell.styles.fillColor = [213, 245, 227];
+            data.cell.styles.textColor = [0, 0, 0];
+          }
+          return; // all other header cells handled by headStyles
+        }
+
+        // Quantity Prepared row — green, bold
+        if (data.row.index === qtyPrepRowIdx) {
+          data.cell.styles.fillColor = [213, 232, 212];
+          data.cell.styles.fontStyle = 'bold';
+          return;
+        }
+
+        // TOTAL row — orange, bold (overrides TOTAL column green for this row)
+        if (data.row.index === totalsRowIdx) {
           data.cell.styles.fillColor = [243, 156, 18];
           data.cell.styles.fontStyle = 'bold';
-        } else {
-          data.cell.styles.fillColor = hexToRgb(getRowColor(data.row.index));
+          return;
+        }
+
+        // Customer rows — TOTAL column green, others get per-row color
+        if (data.column.index === totalColIdx) {
+          data.cell.styles.fillColor = [213, 245, 227];
+          data.cell.styles.fontStyle = 'bold';
+          return;
+        }
+
+        data.cell.styles.fillColor = hexToRgb(getRowColor(data.row.index));
+        // col 0 is the customer name — leave normal weight
+        if (data.column.index > 0 && data.cell.raw !== '') {
+          data.cell.styles.fontStyle = 'bold';
         }
       }
     });
-    doc.save(`delivery_${deliveryDate}.pdf`);
+
+    // Open blob URL in new tab so the user can preview before saving
+    window.open(doc.output('bloburi'), '_blank');
   };
   // ─── Export Kitchen Prep Sheet to PDF ────────────────────────
 const exportKitchenPrepPDF = () => {
@@ -780,14 +879,18 @@ const exportKitchenPrepPDF = () => {
                   {menuItems.map(item => (
                     <th key={item.id} className="product-header">{item.name}</th>
                   ))}
-                  <th>TOTAL</th>
+                  {/* TOTAL column — green highlight */}
+                  <th style={{ backgroundColor: '#d5f5e3', color: '#000' }}>TOTAL</th>
+                  {/* BOXES column — yellow highlight */}
+                  <th style={{ backgroundColor: '#fff176', color: '#000' }}>BOXES</th>
                 </tr>
                 <tr>
                   <th></th>
                   {menuItems.map(item => (
                     <th key={item.id} className="product-code">{item.code}</th>
                   ))}
-                  <th></th>
+                  <th style={{ backgroundColor: '#d5f5e3' }}></th>
+                  <th style={{ backgroundColor: '#fff176' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -853,8 +956,13 @@ const exportKitchenPrepPDF = () => {
                         />
                       </td>
                     ))}
-                    <td className="row-total">
+                    {/* TOTAL column — green per customer row */}
+                    <td className="row-total" style={{ backgroundColor: '#d5f5e3' }}>
                       {getRowTotal(customer.id) || ''}
+                    </td>
+                    {/* Box count for this customer — yellow highlighter column */}
+                    <td style={{ backgroundColor: '#fff176', fontWeight: 'bold', textAlign: 'center' }}>
+                      {boxCount(getRowTotal(customer.id))}
                     </td>
                   </tr>
                 ))}
@@ -865,6 +973,10 @@ const exportKitchenPrepPDF = () => {
                     <td key={item.id}>{getColumnTotal(item.id) || ''}</td>
                   ))}
                   <td>{getGrandTotal() || ''}</td>
+                  {/* Sum of full boxes per customer — consistent with adding up the BOXES column */}
+                  <td style={{ backgroundColor: '#fff176', fontWeight: 'bold', textAlign: 'center' }}>
+                    {`${tableCustomers.reduce((sum, c) => sum + Math.floor(getRowTotal(c.id) / 16), 0)}/`}
+                  </td>
                 </tr>
                 {/* Quantity prepared row */}
                 <tr style={{ backgroundColor: '#d5e8d4', fontWeight: 'bold' }}>
@@ -874,7 +986,9 @@ const exportKitchenPrepPDF = () => {
                       {getTrays(item.code, getColumnTotal(item.id))}
                     </td>
                   ))}
-                  <td></td>
+                  {/* TOTAL column — green, empty for this row */}
+                  <td style={{ backgroundColor: '#d5f5e3' }}></td>
+                  <td style={{ backgroundColor: '#fff176' }}></td>
                 </tr>
               </tbody>
             </table>
