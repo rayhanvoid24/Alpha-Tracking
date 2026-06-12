@@ -137,6 +137,7 @@ class DeliveryOrder(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_delivered = models.BooleanField(default=False)
+    customer_order = models.JSONField(default=list, blank=True)
 
     @property
     def use_by_date(self):

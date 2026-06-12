@@ -459,8 +459,9 @@ class DeliveryOrderView(APIView):
             'is_delivered': order.is_delivered,
             'items': items_data,
             'invoiced_customer_ids': invoiced_ids,
+            'customer_order': order.customer_order,
         }, status=status.HTTP_200_OK)
-    
+
 # Saves a quantity for a customer x dish cell
 # -----------------------------------------------
 class DeliveryItemView(APIView):
@@ -506,6 +507,7 @@ class BulkSaveDeliveryView(APIView):
             return Response({'error': 'Delivery order not found'}, status=status.HTTP_404_NOT_FOUND)
 
         items = request.data.get('items', [])
+        customer_order = request.data.get('customer_order', [])
 
         with transaction.atomic():
             DeliveryItem.objects.filter(delivery_order=order).delete()
@@ -538,6 +540,10 @@ class BulkSaveDeliveryView(APIView):
                         quantity=qty,
                     )
 
+            if customer_order:
+                order.customer_order = customer_order
+                order.save(update_fields=['customer_order'])
+
         # Return the saved state in the same shape as GET /delivery/<date>/
         saved_items = DeliveryItem.objects.filter(delivery_order=order).select_related('customer', 'custom_entry', 'menu_item')
         items_data = []
@@ -561,6 +567,7 @@ class BulkSaveDeliveryView(APIView):
             'is_delivered': order.is_delivered,
             'items': items_data,
             'invoiced_customer_ids': invoiced_ids,
+            'customer_order': order.customer_order,
         }, status=status.HTTP_200_OK)
 
 
@@ -645,7 +652,7 @@ class KitchenPrepView(APIView):
             pesto_sauce = 3.0
 
         # ── Step 7: Pasta calculations ──
-        penne = math.ceil((totals.get('1007', 0) / 6.25) -2)
+        penne = math.ceil((totals.get('1007', 0) / 6.25) -0.5)
         casarecce = max(0, round_up((totals.get('2005', 0) / 7.25) - 1, 0.5))
         pea_risotto = round_up(totals.get('2003', 0) * 290 / 4700, 0.25)
         spaghetti = round_up(totals.get('1389', 0) * 80 / 1000, 0.1)

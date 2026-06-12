@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getMenuItems, getCustomers, createDeliveryOrder, getDeliveryOrder, getKitchenPrep, generateInvoice, deleteGeneratedInvoice, markDelivered, saveDeliveryOrder } from '../services/api';
 import './CalculatorPage.css';
 import './KitchenPrepSheet.css';
@@ -64,14 +64,30 @@ export default function CalculatorPage() {
     loadOrCreateOrder(date);
   };
 
-  // ─── Rebuild quantities + tableCustomers from a saved items array ──
-  const restoreFromItems = (items) => {
+  // ─── Rebuild quantities + tableCustomers from saved data ──────
+  // customerOrder (from backend) is [{type:'real',id:N} | {type:'custom',name:'...'}]
+  // Falls back to item-appearance order when customerOrder is absent (e.g. copy from last week).
+  const restoreFromItems = (items, customerOrder) => {
     const q = {};
     items.forEach(item => {
       const customerId = item.customer_id != null ? item.customer_id : `custom-${item.custom_entry_id}`;
       q[`${customerId}-${item.menu_item_id}`] = item.quantity;
     });
 
+    if (customerOrder && customerOrder.length > 0) {
+      const tc = customerOrder.map(entry => {
+        if (entry.type === 'real') {
+          return customers.find(c => c.id === entry.id) || null;
+        }
+        const match = items.find(i => i.custom_entry_id != null && i.custom_entry_name === entry.name);
+        return match
+          ? { id: `custom-${match.custom_entry_id}`, name: entry.name, isCustom: true }
+          : { id: `custom-${entry.name}`, name: entry.name, isCustom: true };
+      }).filter(Boolean);
+      return { quantities: q, tableCustomers: tc };
+    }
+
+    // Fallback: derive order from item appearance
     const seenCustomerIds = new Set();
     const restoredReal = [];
     items.filter(i => i.customer_id != null).forEach(i => {
@@ -108,7 +124,7 @@ export default function CalculatorPage() {
         setUseByDate(res.data.use_by_date);
         setIsDelivered(res.data.is_delivered || false);
         setInvoicedCustomerIds(res.data.invoiced_customer_ids || []);
-        const { quantities: q, tableCustomers: tc } = restoreFromItems(res.data.items);
+        const { quantities: q, tableCustomers: tc } = restoreFromItems(res.data.items, res.data.customer_order);
         setQuantities(q);
         setTableCustomers(tc);
         fetchKitchenPrep(res.data.id);
@@ -158,6 +174,31 @@ export default function CalculatorPage() {
     setTableCustomers(prev => prev.filter(c => c.id !== customerId));
   };
 
+  // ─── Drag-and-drop row reordering ────────────────────────────
+  const dragIndex = useRef(null);
+
+  const handleDragStart = (e, index) => {
+    dragIndex.current = index;
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, index) => {
+    e.preventDefault();
+    if (dragIndex.current === null || dragIndex.current === index) return;
+    setTableCustomers(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex.current, 1);
+      next.splice(index, 0, moved);
+      return next;
+    });
+    dragIndex.current = null;
+  };
+
   // ─── Arrow-key navigation between cells (Excel-style) ────────
   const handleCellKeyDown = (e, rowIndex, colIndex) => {
     let targetRow = rowIndex;
@@ -199,16 +240,17 @@ export default function CalculatorPage() {
         }
       });
     });
-    saveDeliveryOrder(orderId, { items })
+    const customerOrder = tableCustomers.map(c =>
+      String(c.id).startsWith('custom-')
+        ? { type: 'custom', name: c.name }
+        : { type: 'real', id: c.id }
+    );
+    saveDeliveryOrder(orderId, { items, customer_order: customerOrder })
       .then(res => {
-        const { quantities: q, tableCustomers: tc } = restoreFromItems(res.data.items);
+        const { quantities: q, tableCustomers: tc } = restoreFromItems(res.data.items, res.data.customer_order);
         setQuantities(q);
-        // Preserve the user's row order, updating IDs for custom entries
-        setTableCustomers(prev => prev.map(tc_entry => {
-          if (!String(tc_entry.id).startsWith('custom-')) return tc_entry;
-          const saved = tc.find(r => r.name === tc_entry.name);
-          return saved || tc_entry;
-        }));
+        // Restore the saved order (which already reflects the user's arrangement)
+        setTableCustomers(tc);
         fetchKitchenPrep(orderId);
         setSaving(false);
         setSavedIndicator(true);
@@ -895,10 +937,20 @@ const exportKitchenPrepPDF = () => {
               </thead>
               <tbody>
                 {tableCustomers.map((customer, idx) => (
-                  <tr key={customer.id} style={{ backgroundColor: getRowColor(idx) }}>
+                  <tr
+                    key={customer.id}
+                    style={{ backgroundColor: getRowColor(idx), cursor: 'grab' }}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, idx)}
+                  >
                     <td className="customer-name">
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span>{customer.name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ color: '#aaa', fontSize: '14px', cursor: 'grab', userSelect: 'none' }}>⠿</span>
+                          <span>{customer.name}</span>
+                        </div>
                         {!customer.isCustom && (
                           invoicedCustomerIds.includes(customer.id) ? (
                             <span style={{
@@ -950,6 +1002,7 @@ const exportKitchenPrepPDF = () => {
                           value={quantities[`${customer.id}-${item.id}`] || ''}
                           onChange={(e) => handleQuantityChange(customer.id, item.id, e.target.value)}
                           onKeyDown={(e) => handleCellKeyDown(e, idx, itemIdx)}
+                          onMouseDown={(e) => e.stopPropagation()}
                           data-row={idx}
                           data-col={itemIdx}
                           className="cell-input"
